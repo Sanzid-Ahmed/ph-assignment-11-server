@@ -1,68 +1,161 @@
-require('dotenv').config();
-const express = require('express');
-const mongoose = require('mongoose');
-const cors = require('cors');
-const cookieParser = require('cookie-parser');
-const morgan = require('morgan');
-
-// --- Import Central Router (Placeholder for now) ---
-const apiRouter = require('./routes/v1'); 
+// index.js
+const express = require("express");
+const cors = require("cors");
+require("dotenv").config();
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+const crypto = require("crypto");
+const admin = require("firebase-admin");
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const port = process.env.PORT || 3000;
 
-// --- Database Connection ---
-const connectDB = async () => {
-    try {
-        await mongoose.connect(process.env.DATABASE_URL);
-        console.log('MongoDB connected successfully.');
-    } catch (error) {
-        console.error('MongoDB connection failed:', error.message);
-        process.exit(1);
-    }
-};
+// Firebase Admin Setup
+const serviceAccount = require("./assetverse-86357-firebase-adminsdk-fbsvc-1ff1cb7421.json");
 
-connectDB();
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
 
-// --- Middleware Setup ---
-const corsOptions = {
-    origin: ['http://localhost:5173'], 
-    credentials: true, 
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-};
-app.use(cors(corsOptions));
+// Middleware
+app.use(cors());
 app.use(express.json());
-app.use(cookieParser());
-app.use(morgan('dev'));
 
-// --- API Routes ---
-app.get('/', (req, res) => {
-    res.send('AssetVerse Server is running! Status: OK');
+// MongoDB Setup
+const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.cynajx1.mongodb.net/?appName=Cluster0`;
+const client = new MongoClient(uri, {
+  serverApi: {
+    version: ServerApiVersion.v1,
+    strict: true,
+    deprecationErrors: true,
+  },
 });
 
-// Central API Router (All v1 endpoints start here)
-app.use('/api/v1', apiRouter); 
+// Helper: Generate tracking ID
+function generateTrackingId() {
+  const prefix = "PRCL";
+  const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const random = crypto.randomBytes(3).toString("hex").toUpperCase();
+  return `${prefix}-${date}-${random}`;
+}
 
-// --- 404 Handler ---
-app.use((req, res) => {
-    res.status(404).send({ 
-        success: false, 
-        message: 'Resource Not Found',
-        path: req.path
-    });
+// Verify Firebase Token Middleware
+const verifyFBToken = async (req, res, next) => {
+  const token = req.headers.authorization;
+  if (!token) return res.status(401).send({ message: "Unauthorized access" });
+
+  try {
+    const idToken = token.split(" ")[1]; // Expect format "Bearer <token>"
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    req.decoded_email = decoded.email;
+    next();
+  } catch (err) {
+    return res.status(401).send({ message: "Unauthorized access" });
+  }
+};
+
+// Main Function
+async function run() {
+  try {
+    await client.connect();
+    console.log("Connected to MongoDB");
+
+
+
+
+
+
+
+
+
+
+
+    
+    const database = client.db("assetverseDB");
+    const usersCollection = database.collection("users");
+
+
+
+
+
+
+
+
+    // HR Registration
+    app.post('/register-hr', verifyFBToken, async(req, res) => {
+      const user = req.body;
+      user.role = 'hr';
+      user.createdAt = new Date();
+
+      const email = user.email;
+      const userExist = await usersCollection.findOne({email})
+
+      if(userExist){
+        return res.send({message: 'user exist'})
+      }
+
+
+      const result = await usersCollection.insertOne(user);
+      res.send(result);
+    })
+
+    // Employee Registration
+    app.post('/register-employee', verifyFBToken, async(req, res) => {
+      const user = req.body;
+      user.role = 'employee';
+      user.createdAt = new Date();
+
+      const email = user.email;
+      const userExist = await usersCollection.findOne({email})
+
+      if(userExist){
+        return res.send({message: 'user exist'})
+      }
+
+
+      const result = await usersCollection.insertOne(user);
+      res.send(result);
+    })
+
+    app.get('/users/:email/role', async(req, res) => {
+      const email = req.params.email;
+      const query = { email }
+      const user = await usersCollection.findOne(query);
+      res.send({role: user?.role || 'user'})
+    })
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    await client.db("admin").command({ ping: 1 });
+    console.log("MongoDB connection is active!");
+  } finally {
+    // await client.close(); // Keep connection alive for server
+  }
+}
+
+run().catch(console.dir);
+
+// Test Route
+app.get("/", (req, res) => {
+  res.send("AssetVerse Server is running!");
 });
 
-// --- General Error Handling Middleware (500 Server Errors) ---
-app.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(500).send({
-        success: false,
-        message: 'Something went wrong on the server!',
-        error: err.message
-    });
-});
-
-// --- Server Listener ---
-app.listen(PORT, () => {
-    console.log(`AssetVerse Server listening on port ${PORT}`);
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
 });
