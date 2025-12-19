@@ -73,6 +73,7 @@ async function run() {
     const database = client.db("assetverseDB");
     const usersCollection = database.collection("users");
     const assetsCollection = database.collection("assets");
+    const requestsCollection = database.collection("requests");
 
 
 
@@ -128,11 +129,25 @@ async function run() {
 
 
 
+    // Create a new asset request
+    app.post("/requests", verifyFBToken, async (req, res) => {
+        const requestData = req.body;
+        requestData.requestDate = new Date();
+        requestData.approvalDate = null;
+        requestData.requestStatus = "pending";
+        requestData.processedBy = "null";
+
+
+        const result = await requestsCollection.insertOne(requestData);
+
+        res.send(result);
+  
+    });
 
 
 
 
-    
+
     // Asset related APIs-------------------------------------
     // Add Assets
     app.post('/assets', verifyFBToken, async (req, res) => {
