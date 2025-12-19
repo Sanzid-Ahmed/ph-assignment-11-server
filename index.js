@@ -157,6 +157,23 @@ async function run() {
       }
     });
 
+    // Update asset
+    app.put('/assets/:id', async (req, res) => {
+      const { id } = req.params;
+      const updateData = req.body;
+
+      const result = await assetsCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: updateData }
+      );
+
+      if (result.matchedCount === 1) {
+        res.send({ success: true, message: 'Asset updated successfully' });
+      } else {
+        res.status(404).send({ success: false, message: 'Asset not found' });
+      }
+    });
+
 
 
 
