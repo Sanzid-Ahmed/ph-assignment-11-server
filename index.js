@@ -82,6 +82,7 @@ async function run() {
 
 
 
+
     // HR Registration
     app.post('/register-hr', verifyFBToken, async(req, res) => {
       const user = req.body;
@@ -129,6 +130,9 @@ async function run() {
 
 
 
+
+
+    
     // Asset related APIs-------------------------------------
     // Add Assets
     app.post('/assets', verifyFBToken, async (req, res) => {
@@ -138,6 +142,12 @@ async function run() {
       const result = await assetsCollection.insertOne(asset);
       res.send(result);
     })
+
+    app.get('/assets', async (req, res) => { 
+      const allAssets = assetsCollection.find(); 
+      const assets = await allAssets.toArray(); 
+      res.send(assets); 
+    });
 
     app.get('/assets/hr/:email', async (req, res) => {
       const email = req.params.email;
