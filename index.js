@@ -139,6 +139,24 @@ async function run() {
       res.send(result);
     })
 
+    app.get('/assets/hr/:email', async (req, res) => {
+      const email = req.params.email;
+      const assets = await assetsCollection.find({ hrEmail: email }).toArray();
+      res.send(assets);
+    });
+
+    // Delete an asset by ID
+    app.delete('/assets/:id', async (req, res) => {
+      const { id } = req.params;
+      const result = await assetsCollection.deleteOne({ _id: new ObjectId(id) });
+
+      if (result.deletedCount === 1) {
+        res.send({ success: true, message: 'Asset deleted successfully' });
+      } else {
+        res.status(404).send({ success: false, message: 'Asset not found' });
+      }
+    });
+
 
 
 
