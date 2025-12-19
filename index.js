@@ -134,6 +134,30 @@ async function run() {
       res.send(user)
     })
 
+    // get all employeeAffiliationsCollection under 1 HR
+    app.get('/employees/:email', async (req, res) => {
+      const email = req.params.email;
+      const employees = await employeeAffiliationsCollection.find({ hrEmail: email }).toArray();
+      res.send(employees);
+    });
+    // delete employee of HR
+    app.delete('/employees/:email', async (req, res) => {
+  const employeeEmail = req.params.email; // this is a string
+  try {
+    const result = await employeeAffiliationsCollection.deleteOne({ employeeEmail });
+
+    if (result.deletedCount === 1) {
+      res.send({ success: true, message: 'Employee deleted successfully' });
+    } else {
+      res.status(404).send({ success: false, message: 'Employee not found' });
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({ success: false, message: 'Failed to delete employee' });
+  }
+});
+
+
     
 
 
