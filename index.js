@@ -155,7 +155,31 @@ async function run() {
     console.error(error);
     res.status(500).send({ success: false, message: 'Failed to delete employee' });
   }
+    });
+    // get all employeeAffiliationsCollection for employee
+  //   app.get('/employee/company/:email', async (req, res) => {
+  // const email = req.params.email;
+  // const affiliation = await employeeAffiliationsCollection.findOne({ employeeEmail: email });
+
+  // res.send({
+  //   companyName: affiliation?.companyName || null,
+  //   hrEmail: affiliation?.hrEmail || null
+  // });
+  //   });
+
+
+    app.get('/employee/company/:email', async (req, res) => {
+  const email = req.params.email;
+    // Find all affiliations of this employee
+    const affiliations = await employeeAffiliationsCollection
+      .find({ employeeEmail: email })
+      .toArray();
+
+    // Return all affiliations
+    res.send(affiliations); // this will be an array of objects
 });
+    
+
 
 
     
@@ -221,6 +245,7 @@ async function run() {
     {
       $set: {
         requestStatus: "approved",
+        Status: "approved",
         approvedAt: new Date(),
         approvedBy: hrEmail,
       },
@@ -290,6 +315,11 @@ async function run() {
       const assets = await assetsCollection.find({ hrEmail: email }).toArray();
       res.send(assets);
     })
+    app.get('/assets/:email', async (req, res) => {
+      const email = req.params.email;
+      const assets = await requestsCollection.find({ requesterEmail: email }).toArray();
+      res.send(assets);
+    })
 
     app.get('/assets/:id', verifyFBToken, async (req, res) => {
   try {
@@ -335,6 +365,48 @@ async function run() {
         res.status(404).send({ success: false, message: 'Asset not found' });
       }
     })
+
+    // return asset
+    app.patch('/requests/return/:id', verifyFBToken, async (req, res) => {
+  const requestId = req.params.id;
+  console.log(requestId);
+
+    // 1️⃣ find the request
+    const request = await requestsCollection.findOne({
+      _id: new ObjectId(requestId)
+    });
+
+
+    // 2️⃣ update request status
+    const updateRequest = await requestsCollection.updateOne(
+      { _id: new ObjectId(requestId) },
+      {
+        $set: {
+          status: "returned",
+          requestStatus: "returned",
+          returned: true,
+          returnedAt: new Date()
+        }
+      }
+    );
+
+
+    
+    // 3️⃣ update asset inventory (optional but recommended)
+    await assetsCollection.updateOne(
+      { _id: new ObjectId(request.assetId) },
+      {
+        $inc: { availableQuantity: +1 }
+      }
+    );
+
+
+    res.send({
+      modifiedCount: updateRequest.modifiedCount,
+      message: "Asset returned successfully"
+    });
+    });
+
 
 
 
