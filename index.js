@@ -142,6 +142,13 @@ async function run() {
 
         res.send(result);
   
+    })
+    
+    // get asset request
+    app.get('/requests/:email', async (req, res) => {
+      const email = req.params.email;
+      const assets = await requestsCollection.find({ hrEmail: email }).toArray();
+      res.send(assets);
     });
 
 
