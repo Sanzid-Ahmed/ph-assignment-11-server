@@ -1,4 +1,3 @@
-// index.js
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
@@ -74,6 +73,8 @@ async function run() {
     const usersCollection = database.collection("users");
     const assetsCollection = database.collection("assets");
     const requestsCollection = database.collection("requests");
+    const assignedAssetsCollection = database.collection("assignedAssets");
+    const employeeAffiliationsCollection = database.collection("employeeAffiliations");
 
 
 
@@ -101,7 +102,6 @@ async function run() {
       const result = await usersCollection.insertOne(user);
       res.send(result);
     })
-
     // Employee Registration
     app.post('/register-employee', verifyFBToken, async(req, res) => {
       const user = req.body;
@@ -127,6 +127,19 @@ async function run() {
       res.send({role: user?.role || 'user'})
     })
 
+    app.get('/users/:email', async(req, res) => {
+      const email = req.params.email;
+      const query = { email }
+      const user = await usersCollection.findOne(query);
+      res.send(user)
+    })
+
+    
+
+
+
+
+
 
 
     // Create a new asset request
@@ -143,13 +156,90 @@ async function run() {
         res.send(result);
   
     })
-    
     // get asset request
     app.get('/requests/:email', async (req, res) => {
       const email = req.params.email;
-      const assets = await requestsCollection.find({ hrEmail: email }).toArray();
+      const assets = await requestsCollection.find({ hrEmail: email,
+      }).toArray();
       res.send(assets);
+    })
+
+    app.patch("/requests/approve/:id", verifyFBToken, async (req, res) => {
+  const requestId = req.params.id;
+  const {
+    assetId,
+    employeeEmail,
+    employeeName,
+    hrEmail,
+    companyName,
+    companyLogo,
+  } = req.body;
+
+  // 1️⃣ Find the asset
+  const asset = await assetsCollection.findOne({ _id: new ObjectId(assetId) });
+  if (!asset) {
+    return res.status(404).send({ message: "Asset not found" });
+  }
+
+  if (asset.availableQuantity <= 0) {
+    return res.status(400).send({ message: "Asset out of stock" });
+  }
+
+  // 2️⃣ Decrease available quantity
+  await assetsCollection.updateOne(
+    { _id: new ObjectId(assetId) },
+    { $inc: { availableQuantity: -1 } }
+  );
+
+  // 3️⃣ Update request status
+  await requestsCollection.updateOne(
+    { _id: new ObjectId(requestId) },
+    {
+      $set: {
+        requestStatus: "approved",
+        approvedAt: new Date(),
+        approvedBy: hrEmail,
+      },
+    }
+  );
+
+  // 4️⃣ Assign asset to employee
+  const assignedAsset = {
+    assetId: new ObjectId(assetId),
+    requestId: new ObjectId(requestId),
+    assetName: asset.productName,
+    assetImage: asset.productImage,
+    employeeEmail,
+    employeeName,
+    hrEmail,
+    companyName,
+    companyLogo,
+    assignedAt: new Date(),
+    status: "assigned",
+    returnable: asset.productType === "Returnable",
+  };
+
+  await assignedAssetsCollection.insertOne(assignedAsset);
+
+
+  const affiliation = await employeeAffiliationsCollection.findOne({ employeeEmail, hrEmail });
+  if (!affiliation) {
+    await employeeAffiliationsCollection.insertOne({
+      employeeEmail,
+      employeeName,
+      hrEmail,
+      companyName,
+      companyLogo,
+      assignedAt: new Date()
     });
+  }
+
+  res.send({
+    success: true,
+    message: "Request approved & asset assigned",
+  });
+    });
+
 
 
 
@@ -169,14 +259,31 @@ async function run() {
       const allAssets = assetsCollection.find(); 
       const assets = await allAssets.toArray(); 
       res.send(assets); 
-    });
+    })
 
     app.get('/assets/hr/:email', async (req, res) => {
       const email = req.params.email;
       const assets = await assetsCollection.find({ hrEmail: email }).toArray();
       res.send(assets);
+    })
+
+    app.get('/assets/:id', verifyFBToken, async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const asset = await assetsCollection.findOne({
+      _id: new ObjectId(id),
     });
 
+    if (!asset) {
+      return res.status(404).send({ message: "Asset not found" });
+    }
+
+    res.send(asset);
+  } catch (error) {
+    res.status(500).send({ message: "Failed to get asset" });
+  }
+    })
     // Delete an asset by ID
     app.delete('/assets/:id', async (req, res) => {
       const { id } = req.params;
@@ -187,8 +294,7 @@ async function run() {
       } else {
         res.status(404).send({ success: false, message: 'Asset not found' });
       }
-    });
-
+    })
     // Update asset
     app.put('/assets/:id', async (req, res) => {
       const { id } = req.params;
@@ -204,8 +310,7 @@ async function run() {
       } else {
         res.status(404).send({ success: false, message: 'Asset not found' });
       }
-    });
-
+    })
 
 
 
