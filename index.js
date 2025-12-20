@@ -4,6 +4,9 @@ require("dotenv").config();
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const crypto = require("crypto");
 const admin = require("firebase-admin");
+const stripe = require('stripe')(process.env.STRIPE_SECRET);
+
+
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -75,6 +78,7 @@ async function run() {
     const requestsCollection = database.collection("requests");
     const assignedAssetsCollection = database.collection("assignedAssets");
     const employeeAffiliationsCollection = database.collection("employeeAffiliations");
+    const paymentCollection = database.collection("payments");
 
 
 
@@ -133,6 +137,40 @@ async function run() {
       const user = await usersCollection.findOne(query);
       res.send(user)
     })
+
+    app.patch("/users/update/:email", async (req, res) => {
+        console.log("🔥 UPDATE PROFILE API HIT");
+    const email = req.params.email;
+    const updatedInfo = req.body;
+
+
+    const filter = { email };
+    const updateDoc = {
+      $set: {
+        name: updatedInfo.name,
+        profileImage: updatedInfo.profileImage,
+        updatedAt: new Date(),
+      },
+    };
+
+    const options = { upsert: false };
+
+    const result = await usersCollection.updateOne(
+      filter,
+      updateDoc,
+      options
+    );
+
+    res.send({
+      acknowledged: true,
+      matchedCount: result.matchedCount,
+      modifiedCount: result.modifiedCount,
+    });
+
+    });
+
+
+
 
     // get all employeeAffiliationsCollection under 1 HR
     app.get('/employees/:email', async (req, res) => {
@@ -417,6 +455,105 @@ async function run() {
 
 
 
+
+
+  // --- Payment Backend for Packages ---
+
+// 1. Create Checkout Session
+app.post('/create-package-checkout-session', async (req, res) => {
+  
+    try {
+        const { packageName, price, employeeLimit, email } = req.body;
+        const amount = parseInt(price) * 100; // Convert to cents
+
+        const session = await stripe.checkout.sessions.create({
+            payment_method_types: ['card'],
+            line_items: [
+                {
+                    price_data: {
+                        currency: 'usd',
+                        unit_amount: amount,
+                        product_data: {
+                            name: `${packageName} Subscription`,
+                            description: `Limit: Up to ${employeeLimit} employees`,
+                        },
+                    },
+                    quantity: 1,
+                },
+            ],
+            customer_email: email,
+            mode: 'payment',
+            metadata: {
+                packageName,
+                employeeLimit: employeeLimit.toString(),
+                email
+            },
+            // Note: Ensure SITE_DOMAIN is set in your .env (e.g., http://localhost:5173)
+            success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+            cancel_url: `${process.env.SITE_DOMAIN}/dashboard/payment-cancelled`,
+        });
+
+        const paymentRecord = {
+                email,
+                packageName,
+                employeeLimit,
+                paidAt: new Date(),
+                status: 'completed'
+            };
+            await paymentCollection.insertOne(paymentRecord);
+
+        
+        res.send({ url: session.url });
+    } catch (error) {
+        console.error("Stripe Error:", error);
+        res.status(400).send({ error: error.message });
+    }
+});
+
+
+app.get('/payments', async (req, res) => {
+    try {
+        const email = req.query.email;
+
+        if (!email) {
+            return res.status(400).send({ success: false, message: "Email is required" });
+        }
+
+        // Fetch all payments for this email
+        const payments = await paymentCollection
+            .find({ email: email })
+            .sort({ paidAt: -1 }) // optional: newest first
+            .toArray();
+
+        res.send({ success: true, payments });
+    } catch (error) {
+        console.error("Error fetching payments:", error);
+        res.status(500).send({ success: false, error: error.message });
+    }
+});
+
+app.patch('/update-user-subscription', async (req, res) => {
+    try {
+        const { email, packageName, employeeLimit } = req.body;
+        console.log("HELOOOOOOO")
+
+        const userQuery = { email: email };
+        const userUpdate = {
+            $inc: { packageLimit: parseInt(employeeLimit) }, // add employeeLimit to existing packageLimit
+            $set: { subscription: packageName }              // update subscription name
+        };
+
+        const userResult = await usersCollection.updateOne(userQuery, userUpdate);
+
+        res.send({
+            success: true,
+            modifiedUser: userResult.modifiedCount
+        });
+    } catch (error) {
+        console.error("Error updating user subscription:", error);
+        res.status(500).send({ success: false, error: error.message });
+    }
+});
 
 
 
