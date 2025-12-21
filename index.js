@@ -326,6 +326,70 @@ async function run() {
     message: "Request approved & asset assigned",
   });
     });
+    
+    app.post("/assets/direct-assign", verifyFBToken, async (req, res) => {
+  const { assetId, employeeEmail, employeeName, hrEmail } = req.body;
+
+  try {
+    // 1️⃣ Find the asset to get latest stock and details
+    const asset = await assetsCollection.findOne({ _id: new ObjectId(assetId) });
+    if (!asset) {
+      return res.status(404).send({ message: "Asset not found" });
+    }
+
+    if (asset.availableQuantity <= 0) {
+      return res.status(400).send({ message: "Asset out of stock" });
+    }
+
+    // 2️⃣ Decrease available quantity
+    await assetsCollection.updateOne(
+      { _id: new ObjectId(assetId) },
+      { $inc: { availableQuantity: -1 } }
+    );
+
+    // 3️⃣ Create the Assignment Record (similar to your assignedAssetsCollection)
+    const directAssignment = {
+      assetId: new ObjectId(assetId),
+      assetName: asset.productName,
+      assetImage: asset.productImage,
+      employeeEmail,
+      employeeName,
+      hrEmail,
+      // Note: Pulling company info from the HR's asset record
+      companyName: asset.companyName || "", 
+      companyLogo: asset.companyLogo || "",
+      assignedAt: new Date(),
+      status: "assigned",
+      returnable: asset.productType === "Returnable",
+      isDirectAssignment: true // Useful for tracking
+    };
+
+    const result = await assignedAssetsCollection.insertOne(directAssignment);
+
+    // 4️⃣ Ensure employee is affiliated with this HR/Company
+    const affiliation = await employeeAffiliationsCollection.findOne({ employeeEmail, hrEmail });
+    if (!affiliation) {
+      await employeeAffiliationsCollection.insertOne({
+        employeeEmail,
+        employeeName,
+        hrEmail,
+        companyName: asset.companyName,
+        companyLogo: asset.companyLogo,
+        assignedAt: new Date()
+      });
+    }
+
+    res.send({
+      success: true,
+      message: "Asset assigned successfully",
+      insertedId: result.insertedId
+    });
+
+  } catch (error) {
+    console.error("Direct Assign Error:", error);
+    res.status(500).send({ message: "Internal Server Error" });
+  }
+    });
 
 
 
@@ -348,11 +412,29 @@ async function run() {
       res.send(assets); 
     })
 
+    app.get('/assets/single/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const query = { _id: new ObjectId(id) };
+    const result = await assetsCollection.findOne(query);
+    
+    if (!result) {
+      return res.status(404).send({ message: "Asset not found" });
+    }
+    
+    res.send(result);
+  } catch (error) {
+    console.error("Error fetching single asset:", error);
+    res.status(500).send({ message: "Internal Server Error" });
+  }
+    });
+
     app.get('/assets/hr/:email', async (req, res) => {
       const email = req.params.email;
       const assets = await assetsCollection.find({ hrEmail: email }).toArray();
       res.send(assets);
     })
+
     app.get('/assets/:email', async (req, res) => {
       const email = req.params.email;
       const assets = await requestsCollection.find({ requesterEmail: email }).toArray();
