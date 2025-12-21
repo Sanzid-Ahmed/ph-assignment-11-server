@@ -304,6 +304,7 @@ async function run() {
     assignedAt: new Date(),
     status: "assigned",
     returnable: asset.productType === "Returnable",
+    isDirectAssignment: false,
   };
 
   await assignedAssetsCollection.insertOne(assignedAsset);
@@ -317,6 +318,7 @@ async function run() {
       hrEmail,
       companyName,
       companyLogo,
+      isDirectAssignment: false,
       assignedAt: new Date()
     });
   }
@@ -328,18 +330,11 @@ async function run() {
     });
 
     app.post("/assets/direct-assign", verifyFBToken, async (req, res) => {
-      const { assetId, employeeEmail, employeeName, hrEmail } = req.body;
+      const { assetId, employeeEmail, employeeName, hrEmail, note = "" } = req.body;
 
-  try {
+
     // 1️⃣ Find the asset to get latest stock and details
     const asset = await assetsCollection.findOne({ _id: new ObjectId(assetId) });
-    if (!asset) {
-      return res.status(404).send({ message: "Asset not found" });
-    }
-
-    if (asset.availableQuantity <= 0) {
-      return res.status(400).send({ message: "Asset out of stock" });
-    }
 
     // 2️⃣ Decrease available quantity
     await assetsCollection.updateOne(
@@ -366,29 +361,29 @@ async function run() {
 
     const result = await assignedAssetsCollection.insertOne(directAssignment);
 
-    // 4️⃣ Ensure employee is affiliated with this HR/Company
-    const affiliation = await employeeAffiliationsCollection.findOne({ employeeEmail, hrEmail });
-    if (!affiliation) {
-      await employeeAffiliationsCollection.insertOne({
-        employeeEmail,
-        employeeName,
-        hrEmail,
-        companyName: asset.companyName,
-        companyLogo: asset.companyLogo,
-        assignedAt: new Date()
-      });
-    }
+    const requestDoc = {
+      assetId: asset._id.toString(),
+      assetName: asset.productName,
+      assetType: asset.productType,
+      requesterEmail: employeeEmail,
+      requesterName: employeeName,
+      hrEmail,
+      companyName: asset.companyName || "",
+      requestDate: new Date(),
+      note,
+      requestStatus: "approved", // Direct assignments are already approved
+      approvalDate: new Date(),
+      processedBy: hrEmail,
+      isDirectAssignment: true
+    };
+
+    await requestsCollection.insertOne(requestDoc);
 
     res.send({
       success: true,
       message: "Asset assigned successfully",
       insertedId: result.insertedId
     });
-
-  } catch (error) {
-    console.error("Direct Assign Error:", error);
-    res.status(500).send({ message: "Internal Server Error" });
-  }
     });
 
 
