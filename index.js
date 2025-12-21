@@ -326,9 +326,9 @@ async function run() {
     message: "Request approved & asset assigned",
   });
     });
-    
+
     app.post("/assets/direct-assign", verifyFBToken, async (req, res) => {
-  const { assetId, employeeEmail, employeeName, hrEmail } = req.body;
+      const { assetId, employeeEmail, employeeName, hrEmail } = req.body;
 
   try {
     // 1️⃣ Find the asset to get latest stock and details
