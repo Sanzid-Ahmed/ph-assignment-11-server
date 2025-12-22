@@ -12,7 +12,15 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 // Firebase Admin Setup
-const serviceAccount = require("./assetverse-86357-firebase-adminsdk-fbsvc-1ff1cb7421.json");
+// const serviceAccount = require("./assetverse-86357-firebase-adminsdk-fbsvc-1ff1cb7421.json");
+
+
+// const serviceAccount = require("./firebase-admin-key.json");
+
+const decoded = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString('utf8')
+const serviceAccount = JSON.parse(decoded);
+
+
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
@@ -94,6 +102,8 @@ async function run() {
       const user = req.body;
       user.role = 'hr';
       user.createdAt = new Date();
+      user.packageLimit = 5;
+      user.subscription = "basic";
 
       const email = user.email;
       const userExist = await usersCollection.findOne({email})
@@ -641,8 +651,8 @@ app.patch('/update-user-subscription', async (req, res) => {
 
 
 
-    await client.db("admin").command({ ping: 1 });
-    console.log("MongoDB connection is active!");
+    // await client.db("admin").command({ ping: 1 });
+    // console.log("MongoDB connection is active!");
   } finally {
     // await client.close(); // Keep connection alive for server
   }

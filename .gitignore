@@ -1,3 +1,4 @@
 node_modules
 .env
 assetverse-86357-firebase-adminsdk-fbsvc-1ff1cb7421.json
+.vercel
